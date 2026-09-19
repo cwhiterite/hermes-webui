@@ -101,6 +101,88 @@ def _install_fake_account_usage(monkeypatch, *, view=None, exc=None):
     return account_usage
 
 
+def _install_fake_insights(monkeypatch, *, db_path_exists=True, generate_exc=None):
+    """Install fakes for the /insights backend runtime (hermes_state + agent.insights).
+
+    Returns a ``calls`` list capturing ``(action, days)`` entries for the
+    engine, DB open, and DB close so tests can assert the arg parsing and
+    read-only lifecycle without touching real session state.
+    """
+    import sys
+
+    agent_pkg = sys.modules.get("agent") or ModuleType("agent")
+    monkeypatch.setattr(agent_pkg, "__path__", [], raising=False)
+    insights = ModuleType("agent.insights")
+
+    hermes_state = ModuleType("hermes_state")
+    calls = []
+
+    class _FakeDB:
+        _closed = False
+
+        def close(self):
+            self._closed = True
+            calls.append(("db_close", None))
+
+    class _FakeEngine:
+        def __init__(self, db):
+            self.db = db
+            calls.append(("engine_init", None))
+
+        def generate(self, days=30, source=None):
+            calls.append(("generate", days, source))
+            if generate_exc is not None:
+                raise generate_exc
+            return {
+                "days": days,
+                "empty": False,
+                "overview": {
+                    "total_sessions": 4,
+                    "total_messages": 293,
+                    "total_tool_calls": 115,
+                    "total_tokens": 123,
+                    "total_input_tokens": 100,
+                    "total_output_tokens": 23,
+                    "total_hours": 0.6,
+                    "avg_session_duration": 540,
+                },
+                "models": [{"model": "deepseek-v4-flash-0731", "sessions": 2, "total_tokens": 100}],
+                "platforms": [{"platform": "webui", "sessions": 1, "messages": 17}],
+                "tools": [{"tool": "terminal", "count": 76, "percentage": 66.1}],
+                "skills": {"top_skills": []},
+                "activity": {},
+            }
+
+        def format_gateway(self, report):
+            calls.append(("format_gateway", report["days"]))
+            return f"📊 fake insights {report['days']}"
+
+    class _FakeDBPath:
+        def __init__(self, exists):
+            self._exists = exists
+
+        def exists(self):
+            return self._exists
+
+    def _default_db_path():
+        return _FakeDBPath(db_path_exists)
+
+    def _open_db(read_only=True):
+        calls.append(("db_open", read_only))
+        return _FakeDB()
+
+    hermes_state_any = cast(Any, hermes_state)
+    hermes_state_any._default_db_path = _default_db_path
+    hermes_state_any.SessionDB = _open_db
+    insights_any = cast(Any, insights)
+    insights_any.InsightsEngine = _FakeEngine
+
+    monkeypatch.setitem(sys.modules, "agent", agent_pkg)
+    monkeypatch.setitem(sys.modules, "agent.insights", insights)
+    monkeypatch.setitem(sys.modules, "hermes_state", hermes_state)
+    return calls
+
+
 def _get(path):
     """GET helper -- returns parsed JSON or raises HTTPError."""
     with urllib.request.urlopen(TEST_BASE + path, timeout=10) as r:
@@ -322,6 +404,120 @@ def test_credits_command_fail_opens_on_runtime_error(monkeypatch):
     output = execute_agent_command('/credits')
 
     assert output == "Couldn't fetch credits right now."
+
+
+def test_insights_command_defaults_to_30_days(monkeypatch):
+    """`/insights` with no arg runs the engine for the default 30-day window."""
+    calls = _install_fake_insights(monkeypatch)
+
+    from api.commands import execute_agent_command
+
+    output = execute_agent_command('/insights')
+
+    assert output == "📊 fake insights 30"
+    assert ("generate", 30, None) in calls
+    assert calls[0] == ("db_open", True), "session DB must be opened read-only"
+    assert calls[-1][0] == "db_close"
+
+
+def test_insights_command_accepts_days_argument(monkeypatch):
+    """`/insights 14` parses the explicit days window."""
+    calls = _install_fake_insights(monkeypatch)
+
+    from api.commands import execute_agent_command
+
+    output = execute_agent_command('/insights 14')
+
+    assert output == "📊 fake insights 14"
+    assert ("generate", 14, None) in calls
+
+
+def test_insights_command_invalid_days_returns_usage(monkeypatch):
+    """A non-numeric days arg returns a usage hint instead of raising."""
+    _install_fake_insights(monkeypatch)
+
+    from api.commands import execute_agent_command
+
+    output = execute_agent_command('/insights soon')
+
+    assert "Usage: /insights" in output
+    assert "days must be a whole number" in output
+
+
+def test_insights_command_no_db_returns_no_data(monkeypatch):
+    """`/insights` degrades to a no-data message when the session DB is absent."""
+    _install_fake_insights(monkeypatch, db_path_exists=False)
+
+    from api.commands import execute_agent_command
+
+    output = execute_agent_command('/insights')
+
+    assert output == "No session data yet."
+
+
+def test_insights_command_failure_is_generic(monkeypatch):
+    """`/insights` failures return a generic message, not raw internals."""
+    _install_fake_insights(monkeypatch, generate_exc=RuntimeError("db_dsn=postgresql://user:***@localhost"))
+
+    from api.commands import execute_agent_command
+
+    with pytest.raises(RuntimeError) as exc:
+        execute_agent_command('/insights')
+
+    assert str(exc.value) == "Failed to generate insights"
+    assert 'postgresql' not in str(exc.value)
+
+
+def test_insights_command_allowlisted_in_exec_endpoint(monkeypatch):
+    """`/insights` must be reachable through the agent exec path, not the plugin fallback."""
+
+    class _FakeHandler:
+        def __init__(self, body_bytes: bytes):
+            self.status = None
+            self.sent_headers = []
+            self.body = bytearray()
+            self.wfile = self
+            self.rfile = io.BytesIO(body_bytes)
+            self.headers = {"Content-Length": str(len(body_bytes))}
+            self.request = None
+
+        def send_response(self, status):
+            self.status = status
+
+        def send_header(self, name, value):
+            self.sent_headers.append((name, value))
+
+        def end_headers(self):
+            pass
+
+        def write(self, data):
+            self.body.extend(data)
+
+        def json_body(self):
+            return json.loads(bytes(self.body).decode("utf-8"))
+
+    import api.commands as commands
+    from api import routes
+
+    calls = []
+
+    def _fake_execute_agent_command(command):
+        calls.append(command)
+        return "insights ok"
+
+    def _fake_execute_plugin_command(command):
+        raise AssertionError(f"plugin path should not run for {command!r}")
+
+    monkeypatch.setattr(commands, "execute_agent_command", _fake_execute_agent_command)
+    monkeypatch.setattr(commands, "execute_plugin_command", _fake_execute_plugin_command)
+
+    raw = json.dumps({"command": "/insights"}).encode("utf-8")
+    handler = _FakeHandler(raw)
+    routes.handle_post(handler, SimpleNamespace(path="/api/commands/exec", query=""))
+
+    assert calls == ["/insights"]
+    assert handler.status == 200
+    assert handler.json_body() == {"output": "insights ok"}
 
 
 def test_codex_runtime_command_uses_shared_switch_and_persists(monkeypatch, tmp_path):

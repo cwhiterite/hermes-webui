@@ -592,6 +592,11 @@ def test_reload_mcp_reload_skills_and_codex_runtime_webui_intercept_aliases_are_
     assert "if(_agentCmd&&_AGENT_COMMANDS_RUN_ON_WEBUI.has(_agentCmdName))" not in MESSAGES_JS
 
 
+def test_insights_is_in_webui_intercept_whitelist():
+    """`/insights` must be in _AGENT_COMMANDS_RUN_ON_WEBUI so it is intercepted."""
+    assert "'insights'" in MESSAGES_JS
+
+
 def test_reload_skills_agent_command_metadata_resolves_alias():
     result = _run_commands_js(
         """

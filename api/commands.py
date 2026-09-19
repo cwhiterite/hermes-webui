@@ -28,7 +28,7 @@ _AGENT_COMMAND_ALIASES = {
     'reload_skills': 'reload-skills',
     'codex_runtime': 'codex-runtime',
 }
-_ALLOWED_AGENT_COMMANDS = frozenset({'reload-mcp', 'reload-skills', 'codex-runtime', 'credits'})
+_ALLOWED_AGENT_COMMANDS = frozenset({'reload-mcp', 'reload-skills', 'codex-runtime', 'credits', 'insights'})
 _RELOAD_MCP_LOCK = threading.Lock()
 _RELOAD_SKILLS_LOCK = threading.Lock()
 _CODEX_RUNTIME_LOCK = threading.Lock()
@@ -219,6 +219,8 @@ def execute_agent_command(command: str) -> str:
         return _run_codex_runtime_command(arg_string)
     if canonical == 'credits':
         return _run_credits_command()
+    if canonical == 'insights':
+        return _run_insights_command(arg_string)
 
     raise KeyError(canonical)
 
@@ -391,6 +393,51 @@ def _run_credits_command() -> str:
         lines.append(f"Top up: {topup_url}")
         lines.append("Complete your top-up in the browser; credits will appear in /credits shortly.")
     return "\n".join(lines)
+
+
+def _run_insights_command(arg_string: str) -> str:
+    """Render Hermes' shared usage-insights view (markdown) for the WebUI path.
+
+    Mirrors the CLI's ``cmd_insights`` but formats the report with
+    ``InsightsEngine.format_gateway``, which produces the compact markdown
+    that renders well in chat. ``--source`` is intentionally not surfaced;
+    only the optional ``[days]`` argument is honoured (default 30).
+    """
+    try:
+        from hermes_state import SessionDB, _default_db_path
+        from agent.insights import InsightsEngine
+    except Exception as exc:
+        logger.warning("Failed to import insights runtime", exc_info=True)
+        raise RuntimeError("Insights runtime unavailable") from exc
+
+    days = 30
+    raw_days = str(arg_string or "").strip()
+    if raw_days:
+        try:
+            days = int(raw_days)
+        except ValueError:
+            return "Usage: /insights [days] — days must be a whole number."
+
+    try:
+        if not _default_db_path().exists():
+            return "No session data yet."
+        db = SessionDB(read_only=True)
+    except Exception as exc:
+        logger.warning("Failed to open session DB for /insights", exc_info=True)
+        raise RuntimeError("Failed to read session data for insights") from exc
+
+    try:
+        engine = InsightsEngine(db)
+        report = engine.generate(days=days)
+        return engine.format_gateway(report)
+    except Exception as exc:
+        logger.warning("Failed to build /insights report", exc_info=True)
+        raise RuntimeError("Failed to generate insights") from exc
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
 
 
 def _load_config_for_moa_resolution() -> dict:
