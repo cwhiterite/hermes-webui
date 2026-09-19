@@ -1557,6 +1557,12 @@
   .app-titlebar-title{font-size:12px;font-weight:600;color:var(--text);letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60vw;}
   .app-titlebar-sub{font-size:10px;color:var(--muted);background:var(--hover-bg);padding:2px 7px;border-radius:4px;font-family:var(--font-mono);white-space:nowrap;flex-shrink:0;}
   .app-titlebar-sub[hidden]{display:none;}
+  /* Titlebar insight chips (usage + host health), rendered right of the message
+     count. The chip set and width tiers live in titlebar_insights.js; these are
+     presentation only. */
+  .app-titlebar-insights{display:inline-flex;align-items:center;gap:6px;min-width:0;overflow:hidden;flex-shrink:0;}
+  .app-titlebar-insights[hidden]{display:none;}
+  .tb-insight{font-size:10px;color:var(--muted);background:var(--hover-bg);padding:2px 7px;border-radius:4px;font-family:var(--font-mono);white-space:nowrap;flex-shrink:0;}
   .app-titlebar-title-popover{position:fixed;z-index:300;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);box-shadow:0 4px 16px rgba(0,0,0,.18);word-break:break-word;line-height:1.4;max-width:calc(100vw - 16px);pointer-events:auto;}
   .app-titlebar-hamburger,.app-titlebar-spacer{display:none;width:44px;height:44px;flex-shrink:0;}
   .app-titlebar-hamburger{-webkit-app-region:no-drag;align-items:center;justify-content:center;background:none;border:none;color:var(--muted);border-radius:8px;cursor:pointer;padding:0;-webkit-tap-highlight-color:transparent;transition:background-color .15s,color .15s;}
@@ -3074,6 +3080,7 @@
     .app-titlebar-inner{flex:1 1 auto;}
     .app-titlebar-title{max-width:72vw;}
     .app-titlebar-sub{font-size:9px;padding:1px 5px;}
+    .app-titlebar-insights{display:none;}
     .app-titlebar-title.long-pressing{opacity:.6;transition:opacity .1s;}
     .system-health-panel.insights-card{gap:10px;padding:12px;}
     .system-health-head{align-items:flex-start;}

@@ -252,6 +252,153 @@ function syncAppTitlebar() {
       }, { passive: true });
     }
   }
+  if (typeof syncTitlebarInsights === 'function') syncTitlebarInsights();
+  if (typeof _ensureTitlebarInsightTimers === 'function') _ensureTitlebarInsightTimers();
+}
+
+// ── Titlebar insights (usage + host health chips) ───────────────────────────
+// Renders compact chips to the right of the message count from data the client
+// already has (S.session / S.lastUsage), plus two cached fetches:
+//   /api/insights?days=30  → global usage   (global cost / tokens, 30d)
+//   /api/system/health     → host CPU / RAM
+// The chip set, priority order, and width tiers live in
+// static/titlebar_insights.js::buildTitlebarInsightChips so they are unit
+// tested without a DOM. This file only fetches, caches, and paints.
+const _TB_GLOBAL_TTL_MS = 60000;
+const _TB_HEALTH_TTL_MS = 15000;
+let _tbGlobalCache = null;      // { total_cost, total_tokens } | null
+let _tbGlobalFetchedAt = 0;
+let _tbGlobalInFlight = null;
+let _tbHealthCache = null;      // /api/system/health payload | null
+let _tbHealthFetchedAt = 0;
+let _tbHealthInFlight = null;
+let _tbResizeTimer = null;
+let _tbLastSignature = null;
+let _tbTimersStarted = false;
+
+function _tbUsageInput() {
+  const s = (typeof S !== 'undefined' && S && S.session) ? S.session : null;
+  if (!s) return null;
+  const u = (S.lastUsage && typeof S.lastUsage === 'object') ? S.lastUsage : {};
+  const pick = (latest, stored) => latest != null ? latest : (stored != null ? stored : null);
+  return {
+    estimated_cost: pick(u.estimated_cost, s.estimated_cost),
+    input_tokens: pick(u.input_tokens, s.input_tokens),
+    output_tokens: pick(u.output_tokens, s.output_tokens),
+    cache_read_tokens: pick(u.cache_read_tokens, s.cache_read_tokens),
+    cache_hit_percent: pick(u.cache_hit_percent, s.cache_hit_percent),
+  };
+}
+
+function _tbSystemInput() {
+  if (!_tbHealthCache) return null;
+  const cpu = _tbHealthCache.cpu;
+  const mem = _tbHealthCache.memory;
+  return {
+    cpu_percent: cpu && cpu.percent != null ? cpu.percent : null,
+    memory_percent: mem && mem.percent != null ? mem.percent : null,
+  };
+}
+
+function _tbLocalizedTitle(chip) {
+  if (typeof t !== 'function') return chip.detail || chip.label;
+  const key = 'titlebar_insight_' + chip.key.replace(/-/g, '_');
+  const label = t(key);
+  // t() echoes the key back when a locale lacks the string; fall back to detail.
+  if (!label || label === key) return chip.detail || chip.label;
+  return label + ': ' + (chip.detail || chip.label);
+}
+
+function syncTitlebarInsights() {
+  const el = document.getElementById('appTitlebarInsights');
+  if (!el) return;
+  const panel = (typeof _currentPanel === 'string' && _currentPanel) ? _currentPanel : 'chat';
+  const sessionInput = (panel === 'chat') ? _tbUsageInput() : null;
+  if (!sessionInput) {
+    if (!el.hidden) { el.hidden = true; el.textContent = ''; }
+    _tbLastSignature = null;
+    return;
+  }
+  if (typeof buildTitlebarInsightChips !== 'function') return;
+  const chips = buildTitlebarInsightChips({
+    viewportWidth: window.innerWidth,
+    session: sessionInput,
+    global: _tbGlobalCache,
+    system: _tbSystemInput(),
+  });
+  // Repaint only when the rendered chips actually change — this runs on every
+  // titlebar sync and every usage update, so avoid needless DOM churn.
+  const signature = chips.map(c => c.key + '=' + c.label).join('|');
+  if (signature === _tbLastSignature) return;
+  _tbLastSignature = signature;
+  if (!chips.length) {
+    el.hidden = true;
+    el.textContent = '';
+    return;
+  }
+  el.textContent = '';
+  for (const chip of chips) {
+    const span = document.createElement('span');
+    span.className = 'tb-insight';
+    span.dataset.insight = chip.key;
+    span.textContent = chip.label;
+    const title = _tbLocalizedTitle(chip);
+    span.title = title;
+    span.setAttribute('aria-label', title);
+    el.appendChild(span);
+  }
+  el.hidden = false;
+}
+
+function _tbRefreshGlobal(force) {
+  const now = Date.now();
+  if (!force && _tbGlobalCache && (now - _tbGlobalFetchedAt) < _TB_GLOBAL_TTL_MS) return;
+  if (_tbGlobalInFlight) return;
+  _tbGlobalInFlight = api('/api/insights?days=30').then(data => {
+    _tbGlobalCache = {
+      total_cost: data && data.total_cost,
+      total_tokens: data && data.total_tokens,
+    };
+    _tbGlobalFetchedAt = Date.now();
+    syncTitlebarInsights();
+  }).catch(() => {
+    // Keep the last good value; a failed poll must not blank the chip.
+  }).finally(() => { _tbGlobalInFlight = null; });
+}
+
+function _tbRefreshHealth(force) {
+  const now = Date.now();
+  if (!force && _tbHealthCache && (now - _tbHealthFetchedAt) < _TB_HEALTH_TTL_MS) return;
+  if (_tbHealthInFlight) return;
+  _tbHealthInFlight = api('/api/system/health', { timeoutToast: false }).then(data => {
+    _tbHealthCache = data || null;
+    _tbHealthFetchedAt = Date.now();
+    syncTitlebarInsights();
+  }).catch(() => {
+    // Health is optional chrome; silence failures.
+  }).finally(() => { _tbHealthInFlight = null; });
+}
+
+function _tbTick() {
+  if (document.hidden) return;
+  const panel = (typeof _currentPanel === 'string' && _currentPanel) ? _currentPanel : 'chat';
+  if (panel !== 'chat' || !(typeof S !== 'undefined' && S && S.session)) return;
+  _tbRefreshGlobal(false);
+  _tbRefreshHealth(false);
+}
+
+function _ensureTitlebarInsightTimers() {
+  if (_tbTimersStarted) return;
+  _tbTimersStarted = true;
+  _tbTick();
+  setInterval(_tbTick, _TB_HEALTH_TTL_MS);
+  window.addEventListener('resize', () => {
+    if (_tbResizeTimer) clearTimeout(_tbResizeTimer);
+    _tbResizeTimer = setTimeout(() => { _tbResizeTimer = null; syncTitlebarInsights(); }, 120);
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) { _tbTick(); syncTitlebarInsights(); }
+  });
 }
 
 function _beginSettingsPanelSession() {
