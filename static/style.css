@@ -1398,7 +1398,6 @@
 .selection-context-quote{margin:0;color:var(--muted);font-family:var(--font-ui);font-size:12.5px;line-height:1.45;white-space:pre-wrap;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;}
 .selection-chip-edit{font-size:11px;border:1px solid var(--accent);outline:none;border-radius:6px;padding:2px 6px;background:var(--surface);color:var(--text);width:130px;max-width:70vw;}
 .selection-chip-edit:focus{box-shadow:0 0 0 2px var(--focus-ring);}
-@media (min-width:1600px){.composer-selection-chips{max-width:1600px;}}
 @media (hover:none) and (pointer:coarse){.composer-selection-chips{max-height:min(28dvh,220px);}.selection-context-name,.selection-context-remove{min-height:44px;}.selection-context-remove{min-width:44px;}}
 .sent-selection-context{margin:10px 0 0;padding:10px 12px;border:1px solid color-mix(in srgb,var(--user-bubble-border) 72%,var(--accent) 28%);border-left:3px solid var(--accent);border-radius:10px;background:color-mix(in srgb,var(--user-bubble-bg) 86%,var(--accent-bg) 14%);}
 .sent-selection-context-label{margin-bottom:5px;color:var(--accent-text);font-size:11px;font-weight:750;line-height:1.25;letter-spacing:.01em;}
@@ -2291,8 +2290,6 @@
   .messages.session-nav-enabled .scroll-to-bottom-btn:hover{transform:translateY(-1px);}
   .messages.session-nav-enabled .session-jump-btn__text{display:inline;}
   .messages-inner{margin:0 auto;width:100%;padding:20px 24px 32px;display:flex;flex-direction:column;}
-  @media(min-width:1400px){.messages-inner{max-width:1100px;}}
-  @media(min-width:1800px){.messages-inner{max-width:1200px;}}
   .msg-row{padding:10px 0;}
   .msg-row+.msg-row{border-top:none;}
   /* Steer indicator: transient banner below messages, removed on renderMessages rebuild */
@@ -5902,7 +5899,7 @@ main.main > #mainPlugin{display:none;}
    ═══════════════════════════════════════════════════════════════════ */
 :root {
   --msg-rail: 0;
-  --msg-max: 780px;
+  --msg-max: 1100px;
   --user-bubble-bg: var(--accent);
   --user-bubble-border: var(--accent-hover);
   --user-bubble-text: #fff;
@@ -6408,9 +6405,10 @@ body code[class*="language-"],body pre[class*="language-"],body pre code[class*=
 .msg-date-sep::before, .msg-date-sep::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
 /* ── Widths: collapse messages-inner to match content column ── */
+/* Flat cap: --msg-max is the single source of truth for the transcript column
+   (prose, tool/thinking cards, approval/queue/clarify cards). The composer
+   matches it so both columns line up on wide displays. */
 .messages-inner { max-width: var(--msg-max); }
-@media (min-width: 1400px) { .messages-inner { max-width: calc(var(--msg-max) + 40px); } }
-@media (min-width: 1800px) { .messages-inner { max-width: calc(var(--msg-max) + 80px); } }
 
 @media (max-width: 700px) {
   .msg-role { margin-bottom: 4px; }
@@ -7228,11 +7226,6 @@ main.main.showing-logs > #mainLogs{display:flex;}
   direction:ltr;
   text-align:left;
   unicode-bidi:isolate;
-}
-
-/* Cap composer width on very wide displays so the chip-cluster gap stays bounded */
-@media (min-width:1600px) {
-  .composer-box{max-width:1600px;margin:0 auto;}
 }
 
 #composerMobileCtxBadge { display: none !important; }

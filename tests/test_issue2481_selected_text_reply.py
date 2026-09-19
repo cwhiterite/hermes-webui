@@ -113,7 +113,6 @@ def test_selected_text_reply_styles_and_i18n_exist_for_all_locales():
     assert "max-height:min(32vh,280px)" in css
     assert "overflow-y:auto" in css
     assert "scrollbar-gutter:stable" in css
-    assert "@media (min-width:1600px){.composer-selection-chips{max-width:1600px;}}" in css
     assert "min-width:28px" in css
     assert "min-height:28px" in css
     assert "min-width:44px" in css
