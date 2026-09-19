@@ -2121,7 +2121,11 @@ async function loadSkillCommands(force=false){
     try{
       const data=await api('/api/skills');
       const deduped=new Map();
-      for(const skill of (data&&data.skills)||[]){const entry=_buildSkillCommandEntry(skill);if(entry&&!deduped.has(entry.name))deduped.set(entry.name,entry);}
+      for(const skill of (data&&data.skills)||[]){
+        if(skill&&skill.disabled)continue;
+        const entry=_buildSkillCommandEntry(skill);
+        if(entry&&!deduped.has(entry.name))deduped.set(entry.name,entry);
+      }
       _skillCommandCache=Array.from(deduped.values()).sort((a,b)=>a.name.localeCompare(b.name));
     }catch(_){_skillCommandCache=[];}
     finally{_skillCommandCacheReady=true;_skillCommandLoadPromise=null;}

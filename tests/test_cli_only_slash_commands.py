@@ -659,3 +659,71 @@ def test_builtin_command_opt_outs_do_not_hit_agent_metadata_lookup():
     assert optout_idx != -1
     assert metadata_idx != -1
     assert "if(_parsedCmd&&!_cmd)" in intercept[optout_idx:metadata_idx + 120]
+
+
+def test_disabled_skills_are_hidden_from_slash_autocomplete():
+    """A skill flagged ``disabled`` by /api/skills must not appear in the / menu.
+
+    The Skills panel toggles ``skills.disabled`` server-side, and /api/skills
+    annotates each entry with a ``disabled`` boolean instead of filtering it.
+    The slash autocomplete must honour that flag, otherwise disabling a skill
+    only shortens the agent's own index while every disabled skill stays
+    selectable from the dropdown.
+    """
+    script = textwrap.dedent(
+        f"""
+        const vm = require('vm');
+        const ctx = {{
+          console,
+          localStorage: {{ getItem(){{return null;}}, setItem(){{}}, removeItem(){{}} }},
+          t: (key) => key,
+          api: async (path) => {{
+            if (path === '/api/commands') return {{ commands: [] }};
+            if (path === '/api/commands/bundles') return {{ bundles: [] }};
+            if (path === '/api/skills') return {{ skills: [
+              {{
+                name: 'enabled-skill',
+                description: 'Should stay reachable from the slash menu',
+                category: 'ops',
+                disabled: false
+              }},
+              {{
+                name: 'disabled-skill',
+                description: 'Should be hidden from the slash menu',
+                category: 'ops',
+                disabled: true
+              }}
+            ] }};
+            throw new Error('unexpected api path: ' + path);
+          }}
+        }};
+        vm.createContext(ctx);
+        vm.runInContext({json.dumps(COMMANDS_JS)}, ctx);
+        (async () => {{
+          await vm.runInContext('loadBundleCommands(true)', ctx);
+          await vm.runInContext('loadSkillCommands(true)', ctx);
+          const enabled = await vm.runInContext(
+            "getSlashAutocompleteMatches('/enabled-skill')", ctx);
+          const disabled = await vm.runInContext(
+            "getSlashAutocompleteMatches('/disabled-skill')", ctx);
+          process.stdout.write(JSON.stringify({{
+            enabled: enabled.map(item => ({{ name: item.name, source: item.source }})),
+            disabled: disabled.map(item => ({{ name: item.name, source: item.source }}))
+          }}));
+        }})().catch(err => {{
+          console.error(err && err.stack || err);
+          process.exit(1);
+        }});
+        """
+    )
+    with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8", delete=False) as handle:
+        handle.write(script)
+        script_path = Path(handle.name)
+    try:
+        proc = subprocess.run(["node", str(script_path)], check=True, capture_output=True, text=True)
+    finally:
+        script_path.unlink(missing_ok=True)
+
+    result = json.loads(proc.stdout)
+    assert result["enabled"] == [{"name": "enabled-skill", "source": "skill"}]
+    assert result["disabled"] == []
