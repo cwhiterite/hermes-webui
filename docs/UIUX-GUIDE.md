@@ -61,6 +61,27 @@ Do not render every internal event as a first-class chat card. A turn that used
 many tools should summarize the work as inspectable activity, not make the user
 read a stack of unrelated-looking cards.
 
+## Titlebar
+
+The app titlebar is chrome, not conversation. On the chat panel it shows the
+conversation title (double-click to rename), then the visible message count, then
+optional insight chips. Keep it quiet and secondary to the transcript.
+
+Insight chips surface usage and host health at a glance:
+
+- session cost, session tokens, and session cache-hit % (from the active
+  session's usage),
+- global 30-day cost and tokens,
+- host CPU / RAM.
+
+They are ordered by priority and progressively drop as the window narrows; the
+order and the width tiers live in
+`static/titlebar_insights.js::buildTitlebarInsightChips`. Chips are hidden
+entirely at `<=640px`, where the titlebar also carries the hamburger and action
+buttons and has no room. A chip with no data simply does not render. Prefer
+compact, monospace, muted chips over colorful badges, and never let insights
+crowd or displace the conversation title.
+
 ## Tool, thinking, and activity traces
 
 Tool cards are debug event rows, not chat messages. Show the icon, name, short
@@ -188,7 +209,9 @@ For UI changes, verify the relevant states:
 - long chat content and live streaming when relevant.
 
 Controls should remain usable at touch sizes, and mobile navigation should not
-steal chat height unnecessarily.
+steal chat height unnecessarily. Titlebar insight chips follow the same rule:
+they thin out by width tier and disappear entirely at phone widths (see
+[Titlebar](#titlebar)).
 
 ## Themes and skins
 
