@@ -9203,7 +9203,7 @@ function playAttentionSound(key){
 function _notificationOptions(body,options={}){
   const sid=(options&&options.sid)||(S&&S.session&&S.session.session_id);
   const url=sid?`${location.origin}${_sessionUrlForSid(sid)}`:location.href;
-  return {body:body||'',tag:sid?`hermes-${sid}`:'hermes-webui',renotify:true,icon:'static/favicon-192.png',badge:'static/favicon-32.png',data:{url}};
+  return {body:body||'',tag:sid?`hermes-${sid}`:'hermes-webui',renotify:true,icon:'static/apple-touch-icon.png',badge:'static/apple-touch-icon.png',data:{url}};
 }
 function _showPwaNotification(title,body,options={}){
   const botName=assistantDisplayName();

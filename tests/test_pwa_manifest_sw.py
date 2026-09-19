@@ -30,18 +30,22 @@ class TestManifest:
 
     def test_manifest_has_required_pwa_fields(self):
         data = json.loads(MANIFEST.read_text(encoding="utf-8"))
-        for field in ("name", "start_url", "display", "icons"):
+        for field in ("name", "start_url", "display"):
             assert field in data, f"manifest.json missing required field: {field}"
         assert data["display"] == "standalone", (
             "manifest.display must be 'standalone' for installable PWA"
         )
-        assert isinstance(data["icons"], list) and len(data["icons"]) > 0, (
-            "manifest.icons must be a non-empty list"
+        # Icons are intentionally omitted: this build keeps only
+        # apple-touch-icon.png (referenced from index.html) for the iOS/macOS
+        # Home Screen shortcut, and drops the tab/PWA/notification favicons.
+        assert not data.get("icons"), (
+            "manifest.icons is intentionally empty; the remaining icon is "
+            "apple-touch-icon.png via <link rel=\"apple-touch-icon\">"
         )
 
     def test_manifest_icons_reference_existing_files(self):
         data = json.loads(MANIFEST.read_text(encoding="utf-8"))
-        for icon in data["icons"]:
+        for icon in data.get("icons", []):
             src = icon.get("src", "")
             if src.startswith("http"):
                 continue  # external icon, skip
@@ -424,16 +428,16 @@ class TestBaseHrefOrdering:
             "served from /session/<id> — see #2226"
         )
 
-    def test_base_href_script_before_favicon_links(self):
+    def test_base_href_script_before_apple_touch_icon(self):
         src = INDEX.read_text(encoding="utf-8")
         base_pos = src.find("document.write('<base href=")
-        favicon_pos = src.find('rel="icon"')
+        icon_pos = src.find('rel="apple-touch-icon"')
         assert base_pos != -1, "index.html must contain the dynamic base-href script"
-        assert favicon_pos != -1, "index.html must contain a favicon link"
-        assert base_pos < favicon_pos, (
-            "dynamic <base href> script must appear before <link rel=\"icon\"> "
-            "so browsers resolve favicon URLs against the correct base when "
-            "served from /session/<id> — see #2226"
+        assert icon_pos != -1, "index.html must contain an apple-touch-icon link"
+        assert base_pos < icon_pos, (
+            "dynamic <base href> script must appear before "
+            "<link rel=\"apple-touch-icon\"> so browsers resolve the icon URL "
+            "against the correct base when served from /session/<id> — see #2226"
         )
 
 
@@ -498,13 +502,13 @@ class TestSessionManifestRoute:
         data = json.loads(bytes(handler.body).decode("utf-8"))
         assert data.get("name") == "Hermes"
 
-    def test_session_manifest_json_has_512_icon(self):
+    def test_session_manifest_json_has_no_icons(self):
         handler = self._get("/session/manifest.json")
         data = json.loads(bytes(handler.body).decode("utf-8"))
-        icons = data.get("icons", [])
-        sizes = [icon.get("sizes", "") for icon in icons]
-        assert any("512" in s for s in sizes), (
-            f"manifest must include a 512x512 icon for PWA install, got sizes: {sizes}"
+        # Icons are intentionally omitted; only apple-touch-icon.png (via
+        # index.html) remains for the iOS/macOS Home Screen shortcut.
+        assert not data.get("icons"), (
+            f"manifest.icons is intentionally empty, got: {data.get('icons')}"
         )
 
     def test_session_manifest_json_is_not_html(self):
@@ -558,13 +562,12 @@ class TestRootManifestRoute:
             f"expected application/manifest+json, got {ct!r}"
         )
 
-    def test_root_manifest_json_has_hermes_name_and_512_icon(self):
+    def test_root_manifest_json_has_hermes_name_and_no_icons(self):
         handler = self._get("/manifest.json")
         data = json.loads(bytes(handler.body).decode("utf-8"))
         assert data.get("name") == "Hermes"
-        icons = data.get("icons", [])
-        sizes = [icon.get("sizes", "") for icon in icons]
-        assert any("512" in s for s in sizes)
+        # Icons are intentionally omitted; only apple-touch-icon.png remains.
+        assert not data.get("icons")
 
     def test_root_manifest_webmanifest_returns_200(self):
         handler = self._get("/manifest.webmanifest")
