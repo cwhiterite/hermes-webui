@@ -34,6 +34,17 @@ function _tbFmtCost(c){
   return '$' + (value < 0.01 ? value.toFixed(4) : value.toFixed(2));
 }
 
+// Compact integer-rounded token formatter for the context-gauge chip labels.
+// Rounds to whole k/M so a gauge reads "192K / 655K" instead of
+// "192.0k / 655.4k" — the decimal noise is wasted in a glanceable pressure
+// read. Uses the existing _tbFmtTokens thresholds but drops the fractional part.
+function _tbFmtGaugeTokens(n){
+  const value = Number(n) || 0;
+  if(value >= 1e6) return Math.round(value / 1e6) + 'M';
+  if(value >= 1e3) return Math.round(value / 1e3) + 'K';
+  return String(value);
+}
+
 function _tbMaxPriority(viewportWidth){
   const w = Number(viewportWidth) || 0;
   if(w <= 640) return 0;
@@ -41,6 +52,51 @@ function _tbMaxPriority(viewportWidth){
   if(w <= 1199) return 4;
   if(w <= 1439) return 5;
   return 6;
+}
+
+// Context-pressure tone for the session-tokens chip. Measured against the
+// compression threshold (where the agent actually summarizes old context), not
+// the raw model window — 50% of a 1.31M window is already 100% of a ~655K
+// threshold, so window-only readings understate real pressure. null when there
+// is no threshold to measure against (fallback cumulative rendering).
+function _tbContextTone(fraction){
+  if(!Number.isFinite(fraction)) return null;
+  if(fraction >= 0.95) return 'danger';
+  if(fraction >= 0.80) return 'warn';
+  return 'ok';
+}
+
+function _sessionTokensChip(session){
+  const inputTok = Number(session.input_tokens) || 0;
+  const outputTok = Number(session.output_tokens) || 0;
+  const totalTok = inputTok + outputTok;
+  const promptTok = Number(session.last_prompt_tokens);
+  const thresholdTok = Number(session.threshold_tokens);
+  const contextLen = Number(session.context_length);
+  const hasThreshold = Number.isFinite(thresholdTok) && thresholdTok > 0;
+  // Prefer the compression threshold as the "pressure line" (that's where
+  // context actually gets re-summarized); fall back to the model window when
+  // the threshold isn't reported. Fraction is prompt/threshold so ~192K/655K
+  // reads ~29% pressure, not 15% of the raw 1.31M window.
+  const ceiling = hasThreshold ? thresholdTok : (Number.isFinite(contextLen) ? contextLen : 0);
+  const hasPrompt = Number.isFinite(promptTok) && promptTok > 0;
+  const canGauge = hasPrompt && ceiling > 0;
+  const frac = canGauge ? (promptTok / ceiling) : null;
+  const tone = _tbContextTone(frac);
+  return {
+    key: 'session-tokens',
+    // Context gauge when the live prompt + threshold/window are available;
+    // otherwise fall back to the cumulative in+out total so the chip never
+    // disappears on sessions without context metadata.
+    label: canGauge
+      ? `${_tbFmtGaugeTokens(promptTok)} / ${_tbFmtGaugeTokens(ceiling)} · ${Math.round(frac * 100)}%`
+      : _tbFmtTokens(totalTok),
+    detail: canGauge
+      ? `prompt ${_tbFmtGaugeTokens(promptTok)} of ${_tbFmtGaugeTokens(ceiling)} context · ${Math.round(frac * 100)}%${hasThreshold ? ' (threshold)' : ' (window)'} · in ${_tbFmtTokens(inputTok)} / out ${_tbFmtTokens(outputTok)}`
+      : 'in ' + _tbFmtTokens(inputTok) + ' / out ' + _tbFmtTokens(outputTok),
+    priority: 2,
+    tone,
+  };
 }
 
 function buildTitlebarInsightChips(input){
@@ -52,9 +108,6 @@ function buildTitlebarInsightChips(input){
 
   if(session){
     const cost = Number(session.estimated_cost) || 0;
-    const inputTok = Number(session.input_tokens) || 0;
-    const outputTok = Number(session.output_tokens) || 0;
-    const totalTok = inputTok + outputTok;
     const cacheRead = Number(session.cache_read_tokens) || 0;
     const cachePct = (session.cache_hit_percent === null || session.cache_hit_percent === undefined)
       ? null : Number(session.cache_hit_percent);
@@ -67,14 +120,7 @@ function buildTitlebarInsightChips(input){
         priority: 1,
       });
     }
-    if(totalTok > 0){
-      chips.push({
-        key: 'session-tokens',
-        label: _tbFmtTokens(totalTok),
-        detail: 'in ' + _tbFmtTokens(inputTok) + ' / out ' + _tbFmtTokens(outputTok),
-        priority: 2,
-      });
-    }
+    chips.push(_sessionTokensChip(session));
     if(cachePct !== null && Number.isFinite(cachePct)){
       chips.push({
         key: 'session-cache',

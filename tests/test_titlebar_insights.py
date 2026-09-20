@@ -131,3 +131,85 @@ def test_system_chip_tolerates_a_single_missing_metric():
         }).map(c => c.label);
     """)
     assert result == ["CPU -- / RAM 50%"]
+
+
+# ── Context-gauge session-tokens chip ─────────────────────────────────────────
+# When the live prompt + compression threshold are present, the session-tokens
+# chip becomes a pressure gauge measured against the threshold (the point where
+# context actually gets re-summarized), with a `tone` field for color states.
+
+
+def test_session_tokens_gauges_against_threshold():
+    result = _run("""
+        return buildTitlebarInsightChips({
+          viewportWidth: 1600,
+          session: {
+            input_tokens: 12000, output_tokens: 3456,
+            last_prompt_tokens: 192000,
+            threshold_tokens: 655360,
+            context_length: 1310720,
+          },
+          global: null,
+          system: null,
+        })[0];
+    """)
+    assert result["key"] == "session-tokens"
+    # 192000/655360 ≈ 0.293 → 29% against the threshold (NOT 15% of the window).
+    assert result["label"] == "192K / 655K · 29%"
+    assert result["tone"] == "ok"
+    assert "192K" in result["detail"] and "(threshold)" in result["detail"]
+
+
+def test_session_tokens_gauges_falls_back_to_window_when_no_threshold():
+    result = _run("""
+        return buildTitlebarInsightChips({
+          viewportWidth: 1600,
+          session: {
+            input_tokens: 10, output_tokens: 5,
+            last_prompt_tokens: 500000,
+            threshold_tokens: 0,
+            context_length: 1000000,
+          },
+          global: null,
+          system: null,
+        })[0];
+    """)
+    # 500000/1000000 = 50% against the window when no threshold is reported.
+    assert result["label"] == "500K / 1M · 50%"
+    assert result["tone"] == "ok"
+    assert "(window)" in result["detail"]
+
+
+def test_session_tokens_warn_danger_tones():
+    def run(prompt):
+        return _run(f"""
+            return buildTitlebarInsightChips({{
+              viewportWidth: 1600,
+              session: {{
+                input_tokens: 1, output_tokens: 1,
+                last_prompt_tokens: {prompt},
+                threshold_tokens: 1000000,
+                context_length: 2000000,
+              }},
+              global: null,
+              system: null,
+            }})[0];
+        """)["tone"]
+    assert run(750000) == "ok"      # 75%
+    assert run(820000) == "warn"    # 82% >= 80%
+    assert run(960000) == "danger"  # 96% >= 95%
+
+
+def test_session_tokens_falls_back_to_cumulative_without_context_metadata():
+    result = _run("""
+        return buildTitlebarInsightChips({
+          viewportWidth: 1600,
+          session: { input_tokens: 12000, output_tokens: 3456 },
+          global: null,
+          system: null,
+        })[0];
+    """)
+    # No last_prompt_tokens/threshold → cumulative in+out total, no tone.
+    assert result["key"] == "session-tokens"
+    assert result["label"] == "15.5k"
+    assert result["tone"] is None

@@ -287,6 +287,13 @@ function _tbUsageInput() {
     output_tokens: pick(u.output_tokens, s.output_tokens),
     cache_read_tokens: pick(u.cache_read_tokens, s.cache_read_tokens),
     cache_hit_percent: pick(u.cache_hit_percent, s.cache_hit_percent),
+    // Context-gauge inputs (live prompt size + compression threshold + model
+    // window). Without these the session-tokens chip falls back to the
+    // cumulative in+out total. Both S.lastUsage and S.session carry them via
+    // the same pick-latest-then-stored pattern as the usage fields above.
+    last_prompt_tokens: pick(u.last_prompt_tokens, s.last_prompt_tokens),
+    threshold_tokens: pick(u.threshold_tokens, s.threshold_tokens),
+    context_length: pick(u.context_length, s.context_length),
   };
 }
 
@@ -341,6 +348,9 @@ function syncTitlebarInsights() {
     const span = document.createElement('span');
     span.className = 'tb-insight';
     span.dataset.insight = chip.key;
+    // Context-pressure tone (`ok`/`warn`/`danger`, or absent for non-gauge
+    // chips) drives the color via CSS; absent → default chip color.
+    if (chip.tone) span.dataset.tone = chip.tone;
     span.textContent = chip.label;
     const title = _tbLocalizedTitle(chip);
     span.title = title;

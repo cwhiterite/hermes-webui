@@ -1561,7 +1561,9 @@
      presentation only. */
   .app-titlebar-insights{display:inline-flex;align-items:center;gap:6px;min-width:0;overflow:hidden;flex-shrink:0;}
   .app-titlebar-insights[hidden]{display:none;}
-  .tb-insight{font-size:10px;color:var(--muted);background:var(--hover-bg);padding:2px 7px;border-radius:4px;font-family:var(--font-mono);white-space:nowrap;flex-shrink:0;}
+  .tb-insight{font-size:11.5px;color:var(--text);background:var(--hover-bg);padding:2px 8px;border-radius:4px;font-family:var(--font-mono);white-space:nowrap;flex-shrink:0;}
+  .tb-insight[data-tone="warn"]{color:var(--warning);}
+  .tb-insight[data-tone="danger"]{color:var(--error);}
   .app-titlebar-title-popover{position:fixed;z-index:300;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);box-shadow:0 4px 16px rgba(0,0,0,.18);word-break:break-word;line-height:1.4;max-width:calc(100vw - 16px);pointer-events:auto;}
   .app-titlebar-hamburger,.app-titlebar-spacer{display:none;width:44px;height:44px;flex-shrink:0;}
   .app-titlebar-hamburger{-webkit-app-region:no-drag;align-items:center;justify-content:center;background:none;border:none;color:var(--muted);border-radius:8px;cursor:pointer;padding:0;-webkit-tap-highlight-color:transparent;transition:background-color .15s,color .15s;}
@@ -6678,6 +6680,23 @@ main.main.showing-insights > #mainInsights{display:flex;overflow-y:auto;}
 .wiki-status-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:11px;color:var(--muted);border-top:1px solid var(--border);padding-top:10px;}
 .wiki-status-footer a{color:var(--accent);text-decoration:none;font-weight:600;white-space:nowrap;}
 .wiki-status-footer a:hover{text-decoration:underline;}
+/* ── LLM Wiki browser modal — typography & spacing polish ────────────────── */
+#wikiBrowserOverlay .wiki-browser-item{padding:8px 16px;margin:1px 8px;font-size:13px;letter-spacing:.01em;}
+#wikiBrowserMd{font-family:var(--font-conversation);font-size:13px;line-height:1.62;color:var(--text);overflow-wrap:anywhere;}
+#wikiBrowserMd h1,#wikiBrowserMd h2,#wikiBrowserMd h3,#wikiBrowserMd h4,#wikiBrowserMd h5,#wikiBrowserMd h6{font-family:var(--font-ui);font-weight:700;line-height:1.3;margin:1.35em 0 .5em;color:var(--text);}
+#wikiBrowserMd h1{font-size:17px;border-bottom:1px solid var(--border);padding-bottom:.3em;}
+#wikiBrowserMd h2{font-size:15px;border-bottom:1px solid var(--border);padding-bottom:.25em;}
+#wikiBrowserMd h3{font-size:14px;}
+#wikiBrowserMd h4{font-size:13px;}
+#wikiBrowserMd h1:first-child{margin-top:0;}
+#wikiBrowserMd p{margin:0 0 .85em;}
+#wikiBrowserMd ul,#wikiBrowserMd ol{margin:.2em 0 .9em;padding-left:1.5em;}
+#wikiBrowserMd li{margin:.18em 0;}
+#wikiBrowserMd blockquote{margin:.6em 0 1em;padding:.1em 0 .1em 1em;border-left:3px solid var(--border-subtle,var(--border));color:var(--muted);}
+#wikiBrowserMd pre{margin:.6em 0 1em;}
+#wikiBrowserMd hr{border:0;border-top:1px solid var(--border);margin:1.4em 0;}
+#wikiBrowserMd a{color:var(--accent);}
+
 .skill-usage-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px;}
 .skill-usage-sub{font-size:11px;color:var(--muted);margin-top:-4px;}
 .skill-usage-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px;}
