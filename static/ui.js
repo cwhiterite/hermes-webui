@@ -21060,7 +21060,12 @@ function renderFileTree(){
   }
   _noteWorkspaceBirthtimeSupport(S.entries);
   if(emptyEl) emptyEl.style.display='none';
-  box.style.display='';
+  // Keep the workspace tree hidden while a file preview is open --
+  // renderFileTree() is generic (browse + preview share it) and must NOT
+  // re-show the tree on a refresh that runs mid-preview, or the tree stacks
+  // on top of the file view (agent-turn "done" reload). openFile() hid it
+  // already; never undo that here while previewArea is visible.
+  if(!_hasWorkspacePreviewVisible()) box.style.display='';
   const visibleEntries=_workspaceEntriesForRender(S.entries);
   if(!visibleEntries.length){
     if(emptyEl){emptyEl.textContent=t('workspace_empty_dir');emptyEl.style.display='flex';}
