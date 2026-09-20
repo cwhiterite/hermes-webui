@@ -386,6 +386,7 @@ class TestIssue1436SourceMarkers:
             "context_length fallback (#1436)"
         )
 
+
     def test_routes_load_path_marks_fix_with_issue_number(self):
         """Comment must reference #1436 so future maintainers find this trail."""
         src = ROUTES.read_text(encoding="utf-8")
@@ -396,4 +397,62 @@ class TestIssue1436SourceMarkers:
         block = src[start:end]
         assert "#1436" in block, (
             "GET /api/session load-path block must reference #1436 in a comment"
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Context ring at titlebar-insights decoupling
+# ─────────────────────────────────────────────────────────────────────────────
+
+PANELS_JS = Path(__file__).resolve().parent.parent / "static" / "panels.js"
+
+
+class TestContextRingTitlebarDecoupling:
+    """_syncCtxIndicator updates the titlebar chips by calling
+    syncTitlebarInsights() BEFORE it shows the composer context ring. If that
+    call could throw, a titlebar-insights error would abort the function and
+    silently blank the ring (and syncAppTitlebar calls it too). syncTitlebarInsights
+    must therefore never propagate — its body is wrapped in try/catch.
+    """
+
+    def test_synctitlebarinsights_never_throws(self):
+        src = PANELS_JS.read_text(encoding="utf-8")
+        normalized = "".join(src.split())
+        assert "functionsyncTitlebarInsights(){" in normalized, (
+            "panels.js must define syncTitlebarInsights()"
+        )
+        # The guarded shape: wrapper delegates to _syncTitlebarInsightsImpl()
+        # inside a try/catch, and the implementation is a separate function.
+        assert "try{_syncTitlebarInsightsImpl();}catch" in normalized, (
+            "syncTitlebarInsights must wrap its body in try/catch so a titlebar "
+            "error can never propagate to callers (composer context ring, "
+            "syncAppTitlebar)"
+        )
+        assert "function_syncTitlebarInsightsImpl(){" in normalized, (
+            "the real titlebar-insights body must live in _syncTitlebarInsightsImpl()"
+        )
+
+    def test_ctx_indicator_calls_titlebar_before_showing_ring(self):
+        """Pin the coupling point: the titlebar sync happens before the ring is
+        revealed, which is exactly why the guard is required."""
+        src = UI_JS.read_text(encoding="utf-8")
+        start = src.find("function _syncCtxIndicator(usage){")
+        assert start != -1, "ui.js must define _syncCtxIndicator"
+        # Bound on the next TOP-LEVEL function (line start) so prose containing
+        # the word "function " inside the body can't truncate the block.
+        end = src.find("\nfunction ", start + 10)
+        block = src[start:end if end != -1 else len(src)]
+        call_at = block.find("syncTitlebarInsights()")
+        ring_show_at = block.find("wrap.style.display=''")
+        assert call_at != -1, (
+            "_syncCtxIndicator must call syncTitlebarInsights() (keeps the "
+            "titlebar chips in step with the ring)"
+        )
+        assert ring_show_at != -1, (
+            "_syncCtxIndicator must reveal the ring via wrap.style.display=''"
+        )
+        assert call_at < ring_show_at, (
+            "syncTitlebarInsights() is called before the ring is shown, so an "
+            "unguarded throw there would blank the ring — the try/catch guard "
+            "in syncTitlebarInsights is load-bearing"
         )

@@ -6969,8 +6969,10 @@ function _syncCtxIndicator(usage){
   const el=$('ctxIndicator');
   if(!el)return;
   // Keep the titlebar usage chips in step with the composer context indicator;
-  // both read the same merged usage object, so this is the natural update point.
-  if(typeof syncTitlebarInsights==='function') syncTitlebarInsights();
+    // both read the same merged usage object, so this is the natural update point.
+    // syncTitlebarInsights() is guarded internally (never throws), so this call
+    // cannot abort this function before the ring is shown below.
+    if(typeof syncTitlebarInsights==='function') syncTitlebarInsights();
   const ctxHidden=!!(window._composerControlVisibility&&window._composerControlVisibility.hide_composer_context);
   if(ctxHidden){
     if(wrap) wrap.style.display='none';

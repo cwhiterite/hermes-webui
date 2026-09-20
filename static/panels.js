@@ -317,6 +317,14 @@ function _tbLocalizedTitle(chip) {
 }
 
 function syncTitlebarInsights() {
+  // Titlebar chips are optional chrome. Guard the whole body so a throw here can
+  // never propagate into callers that also update other UI — notably
+  // _syncCtxIndicator (composer context ring) and syncAppTitlebar. Any failure
+  // stays local to the chips instead of blanking unrelated composer controls.
+  try { _syncTitlebarInsightsImpl(); } catch (_) { /* titlebar chips are optional */ }
+}
+
+function _syncTitlebarInsightsImpl() {
   const el = document.getElementById('appTitlebarInsights');
   if (!el) return;
   const panel = (typeof _currentPanel === 'string' && _currentPanel) ? _currentPanel : 'chat';
