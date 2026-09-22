@@ -84,3 +84,8 @@ docs/ui-ux/review-shots/
 # Local WebUI runtime data and credentials
 .webui_password
 attachments/
+
+# Device-local WebUI autostart helpers (task-scheduler launchers specific to
+# this machine — never upstream; each host has its own copy)
+start-webui-autostart.cmd
+start-webui-hidden.vbs
